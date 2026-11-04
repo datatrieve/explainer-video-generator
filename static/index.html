@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainer Video Generator</title>
+<style>
+  :root { --bg:#FBF8F1; --ink:#2B2B2B; --muted:#6b6b6b; --card:#fff; --line:#e7e1d4; --blue:#4C9BE8; --green:#5DBB63; --orange:#F2A541; --red:#E74C3C; --purple:#9B59B6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:28px 20px 8px; max-width:980px; margin:auto; }
+  h1 { margin:0; font-size:28px; letter-spacing:-.5px; }
+  h1 span { color:var(--blue); }
+  header p { color:var(--muted); margin:6px 0 0; }
+  main { max-width:980px; margin:auto; padding:12px 20px 60px; display:grid; gap:18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+  label { display:block; font-size:13px; font-weight:600; margin:12px 0 6px; }
+  textarea, input, select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; background:#fffdf9; color:var(--ink); }
+  textarea { min-height:96px; resize:vertical; }
+  .row { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
+  details { margin-top:14px; }
+  summary { cursor:pointer; font-weight:600; color:var(--muted); }
+  .hint { font-size:12px; color:var(--muted); margin-top:4px; }
+  button { border:0; border-radius:10px; padding:12px 18px; font:inherit; font-weight:700; cursor:pointer; }
+  .primary { background:var(--ink); color:#fff; margin-top:16px; width:100%; font-size:16px; }
+  .primary:disabled { opacity:.5; cursor:default; }
+  .ghost { background:transparent; border:1px solid var(--line); color:var(--ink); padding:8px 12px; font-weight:600; }
+  .bar { height:10px; background:#efe9dc; border-radius:99px; overflow:hidden; margin:10px 0; }
+  .bar > div { height:100%; width:0; background:linear-gradient(90deg,var(--blue),var(--green)); transition:width .6s; }
+  .stage { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .pill { font-size:12px; padding:3px 10px; border-radius:99px; background:#efe9dc; }
+  .pill.done { background:#dff3e0; } .pill.failed { background:#fde2df; } .pill.running { background:#e3effc; }
+  pre { background:#1f1f1f; color:#e8e8e8; padding:12px; border-radius:10px; max-height:260px; overflow:auto; font-size:12px; white-space:pre-wrap; }
+  video { width:100%; border-radius:12px; background:#000; margin-top:10px; }
+  .scenes { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .sc { font-size:12px; padding:3px 8px; border-radius:6px; background:#efe9dc; }
+  .sc.ok { background:#dff3e0; } .sc.fallback { background:#fff0d6; }
+  .jobs a { color:var(--ink); }
+  .jobs li { margin:6px 0; }
+  .links { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  .links a { text-decoration:none; }
+  .err { color:var(--red); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Explainer <span>Video</span> Generator</h1>
+  <p>Type a topic. An LLM writes the script and Manim animations, your TTS narrates, and you get an MP4.</p>
+</header>
+<main>
+  <section class="card">
+    <label for="topic">Topic</label>
+    <textarea id="topic" placeholder="e.g. How U-Net works for image segmentation, with a PyTorch code walkthrough"></textarea>
+    <div class="row">
+      <div><label for="minutes">Length (minutes)</label><input id="minutes" type="number" min="0.5" max="12" step="0.5" value="3"></div>
+      <div><label for="language">Narration language</label>
+        <select id="language"><option>English</option><option>Hindi</option><option>Hinglish</option></select></div>
+      <div><label for="voice">Voice</label><select id="voice"></select></div>
+      <div><label for="speed">Speed</label><input id="speed" type="number" min="0.5" max="2" step="0.05" value="1"></div>
+    </div>
+    <label for="extra">Extra instructions (optional)</label>
+    <input id="extra" placeholder="e.g. for beginners, include a code walkthrough, StatQuest-style BAM moments">
+    <details>
+      <summary>API settings (OpenAI-compatible)</summary>
+      <div class="row">
+        <div><label for="llm_base_url">LLM base URL</label><input id="llm_base_url"></div>
+        <div><label for="llm_model">LLM model</label><input id="llm_model"></div>
+        <div><label for="llm_api_key">LLM API key</label><input id="llm_api_key" type="password" placeholder="server key if blank"></div>
+      </div>
+      <div class="row">
+        <div><label for="tts_base_url">TTS base URL</label><input id="tts_base_url"></div>
+        <div><label for="tts_model">TTS model</label><input id="tts_model"></div>
+        <div><label for="tts_api_key">TTS API key</label><input id="tts_api_key" type="password" placeholder="server key if blank"></div>
+      </div>
+      <div class="row" id="pwrow" style="display:none">
+        <div><label for="app_password">App password</label><input id="app_password" type="password"></div>
+      </div>
+      <p class="hint">Settings and keys are saved only in this browser. Strong coding models (GPT-4.1, Claude Sonnet, DeepSeek V3, Qwen3 Coder) give the best animations.</p>
+    </details>
+    <button class="primary" id="go">Generate video</button>
+    <p class="err" id="formerr"></p>
+  </section>
+
+  <section class="card" id="jobcard" style="display:none">
+    <div class="stage"><strong id="jtitle">Working</strong><span class="pill" id="jstate">queued</span></div>
+    <div class="bar"><div id="jbar"></div></div>
+    <div class="stage"><span id="jstage" class="hint"></span><button class="ghost" id="cancel">Cancel</button></div>
+    <div class="scenes" id="jscenes"></div>
+    <div id="jout"></div>
+    <details open><summary>Log</summary><pre id="jlog"></pre></details>
+  </section>
+
+  <section class="card">
+    <strong>Recent videos</strong>
+    <ul class="jobs" id="jobs"></ul>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const FIELDS = ["minutes","language","voice","speed","extra","llm_base_url","llm_model","llm_api_key","tts_base_url","tts_model","tts_api_key","app_password"];
+let cfg = {}, current = localStorage.getItem("vg_job"), timer = null;
+const FALLBACK_VOICES = ["af_heart","af_bella","af_nicole","af_sarah","am_adam","am_michael","bf_emma","bm_george","hf_alpha","hf_beta","hm_omega","hm_psi"];
+
+function save() { const s = {}; FIELDS.forEach(f => s[f] = $(f).value); localStorage.setItem("vg_settings", JSON.stringify(s)); }
+function load() { try { const s = JSON.parse(localStorage.getItem("vg_settings") || "{}"); FIELDS.forEach(f => { if (s[f] !== undefined && s[f] !== "") $(f).value = s[f]; }); } catch (e) {} }
+function headers() { const h = {"Content-Type": "application/json"}; if ($("app_password").value) h["X-App-Password"] = $("app_password").value; return h; }
+
+async function voices() {
+  const sel = $("voice"), keep = sel.value || (JSON.parse(localStorage.getItem("vg_settings") || "{}").voice) || cfg.voice;
+  let list = [];
+  try {
+    const h = {}; if ($("tts_api_key").value) h["X-TTS-Key"] = $("tts_api_key").value;
+    const r = await fetch("/api/voices?base_url=" + encodeURIComponent($("tts_base_url").value), {headers: h});
+    list = (await r.json()).voices || [];
+  } catch (e) {}
+  if (!list.length) list = FALLBACK_VOICES;
+  sel.innerHTML = list.map(v => `<option>${v}</option>`).join("");
+  sel.value = list.includes(keep) ? keep : list[0];
+}
+
+async function init() {
+  cfg = await (await fetch("/api/config")).json();
+  ["llm_base_url","llm_model","tts_base_url","tts_model"].forEach(f => $(f).value = cfg[f]);
+  $("llm_api_key").placeholder = cfg.server_llm_key ? "using server key" : "required";
+  $("tts_api_key").placeholder = cfg.server_tts_key ? "using server key" : "if your TTS needs one";
+  if (cfg.password_required) $("pwrow").style.display = "";
+  load();
+  await voices();
+  $("tts_base_url").addEventListener("change", voices);
+  $("tts_api_key").addEventListener("change", voices);
+  $("language").addEventListener("change", () => {
+    const hi = $("language").value !== "English";
+    if (hi && !$("voice").value.startsWith("h")) $("voice").value = "hf_alpha";
+    if (!hi && $("voice").value.startsWith("h")) $("voice").value = "af_heart";
+  });
+  refreshJobs();
+  if (current) poll();
+}
+
+$("go").onclick = async () => {
+  $("formerr").textContent = "";
+  const topic = $("topic").value.trim();
+  if (topic.length < 3) { $("formerr").textContent = "Enter a topic."; return; }
+  save();
+  const body = {topic};
+  FIELDS.forEach(f => { if (f !== "app_password") body[f] = $(f).value; });
+  body.minutes = parseFloat(body.minutes) || 3; body.speed = parseFloat(body.speed) || 1;
+  $("go").disabled = true;
+  try {
+    const r = await fetch("/api/jobs", {method: "POST", headers: headers(), body: JSON.stringify(body)});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail ? (typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail)) : r.statusText);
+    current = j.id; localStorage.setItem("vg_job", current); $("jout").innerHTML = ""; poll();
+  } catch (e) { $("formerr").textContent = e.message; }
+  $("go").disabled = false;
+};
+
+$("cancel").onclick = async () => { if (current) await fetch(`/api/jobs/${current}/cancel`, {method: "POST", headers: headers()}); };
+
+function render(j) {
+  $("jobcard").style.display = "";
+  $("jtitle").textContent = j.title || j.topic;
+  $("jstate").textContent = j.state + (j.queue_position ? ` #${j.queue_position}` : "");
+  $("jstate").className = "pill " + j.state;
+  $("jbar").style.width = (j.progress || 0) + "%";
+  $("jstage").textContent = j.stage || "";
+  $("cancel").style.display = (j.state === "running" || j.state === "queued") ? "" : "none";
+  $("jscenes").innerHTML = (j.scenes || []).map(s => `<span class="sc ${s.status.startsWith("ok") ? "ok" : s.status}" title="${s.narration.replace(/"/g, "&quot;")}">${s.id}: ${s.status}</span>`).join("");
+  const log = $("jlog"), atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 10;
+  log.textContent = (j.log || []).join("\n");
+  if (atBottom) log.scrollTop = log.scrollHeight;
+  if (j.state === "done" && !$("jout").innerHTML) {
+    $("jout").innerHTML = `<video controls src="/api/jobs/${j.id}/video"></video>
+      <div class="links"><a class="ghost" href="/api/jobs/${j.id}/video?download=1">Download MP4</a>
+      <a class="ghost" href="/api/jobs/${j.id}/sources">Download script + Manim code</a>
+      <span class="hint">${(j.duration / 60).toFixed(1)} min video, made in ${(j.elapsed / 60).toFixed(1)} min</span></div>`;
+  }
+  if (j.state === "failed") $("jout").innerHTML = `<p class="err">${j.error || "Failed"}</p>`;
+}
+
+async function poll() {
+  clearTimeout(timer);
+  try {
+    const r = await fetch(`/api/jobs/${current}`);
+    if (r.status === 404) { localStorage.removeItem("vg_job"); current = null; $("jobcard").style.display = "none"; return; }
+    const j = await r.json(); render(j);
+    if (j.state === "running" || j.state === "queued") timer = setTimeout(poll, 3000); else refreshJobs();
+  } catch (e) { timer = setTimeout(poll, 6000); }
+}
+
+async function refreshJobs() {
+  try {
+    const list = await (await fetch("/api/jobs")).json();
+    $("jobs").innerHTML = list.length ? list.map(j => `<li><a href="#" data-id="${j.id}">${(j.title || j.topic).slice(0, 80)}</a> <span class="pill ${j.state}">${j.state}</span></li>`).join("") : "<li class='hint'>Nothing yet. Videos are kept until the Space restarts.</li>";
+    document.querySelectorAll("#jobs a").forEach(a => a.onclick = e => { e.preventDefault(); current = a.dataset.id; localStorage.setItem("vg_job", current); $("jout").innerHTML = ""; poll(); window.scrollTo({top: $("jobcard").offsetTop - 10, behavior: "smooth"}); });
+  } catch (e) {}
+}
+init();
+</script>
+</body>
+</html>
