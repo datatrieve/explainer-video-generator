@@ -29,7 +29,7 @@ WEB_CPU, WEB_MEM = 0.125, 256
 R_CPU, R_CPU_MAX, R_MEM, R_MEM_MAX = 0.125, 2.0, 512, 4096
 KEEP_JOBS = 15
 # sha256 of the app password (the page asks for it before generating); empty = no password
-APP_PASSWORD_SHA256 = "9d7c3ad8d9c51b907fc00a87f06aad9f5ab9f8a721aebab04e2765a8388363d1"
+APP_PASSWORD_SHA256 = ""
 
 render_image = (
     modal.Image.debian_slim(python_version="3.11")
