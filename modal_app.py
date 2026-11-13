@@ -207,6 +207,7 @@ def web():
         tts_base_url: str = ""
         tts_model: str = ""
         tts_api_key: str = ""
+    llm_parallel: int = Field(default=2, ge=1, le=8)
 
     def check_pw(pw):
         if APP_PASSWORD_SHA256 and hashlib.sha256((pw or "").encode()).hexdigest() != APP_PASSWORD_SHA256:

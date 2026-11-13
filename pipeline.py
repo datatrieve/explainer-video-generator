@@ -11,7 +11,9 @@ import os
 import re
 import shutil
 import subprocess
+import random
 import sys
+import threading
 import time
 import wave
 
@@ -24,8 +26,22 @@ WIDTH, HEIGHT, FPS = 854, 480, 30
 RENDER_TIMEOUT = int(os.getenv("RENDER_TIMEOUT", "420"))
 MAX_FIXES = int(os.getenv("MAX_FIXES", "3"))
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "240"))
+LLM_PARALLEL = int(os.getenv("LLM_PARALLEL", "2"))  # many providers allow only 2 requests in flight
+LLM_429_RETRIES = int(os.getenv("LLM_429_RETRIES", "8"))
+_SEMS = {}
+_SEMS_LOCK = threading.Lock()
 
-BANNED_NAMES = {"Tex", "MathTex", "SingleStringMathTex", "ImageMobject", "SVGMobject", "open", "exec", "eval",
+
+def _llm_sem(cfg):
+    """One limiter per (provider, parallel) so plan, code and fix calls never exceed the cap together."""
+    n = max(1, min(8, int(cfg.get("llm_parallel") or LLM_PARALLEL)))
+    key = (cfg.get("llm_base_url", ""), n)
+    with _SEMS_LOCK:
+        if key not in _SEMS:
+            _SEMS[key] = threading.BoundedSemaphore(n)
+        return _SEMS[key]
+
+BANNED_NAMES = {"Tex", "MathTex", "DecimalNumber", "Integer", "Variable", "SingleStringMathTex", "ImageMobject", "SVGMobject", "open", "exec", "eval",
                 "__import__", "compile", "input", "globals", "locals", "getattr", "setattr", "delattr"}
 ALLOWED_IMPORTS = {"vg", "manim", "math", "random", "numpy", "itertools", "functools"}
 
@@ -42,20 +58,41 @@ def llm_chat(cfg, messages, temperature=0.4, max_tokens=6000):
         headers["Authorization"] = "Bearer " + cfg["llm_api_key"]
     body = {"model": cfg["llm_model"], "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     last = None
-    for attempt in range(3):
+    errors = 0
+    rate_limited = 0
+    while True:
+        wait = None
         try:
-            r = requests.post(url, headers=headers, json=body, timeout=LLM_TIMEOUT)
-            if r.status_code == 429 or r.status_code >= 500:
+            with _llm_sem(cfg):
+                r = requests.post(url, headers=headers, json=body, timeout=LLM_TIMEOUT)
+            if r.status_code == 429:
+                rate_limited += 1
+                last = f"LLM HTTP 429: {r.text[:300]}"
+                if rate_limited > LLM_429_RETRIES:
+                    break
+                try:
+                    wait = float(r.headers.get("Retry-After", ""))
+                except ValueError:
+                    wait = None
+                wait = min(60.0, wait if wait and wait > 0 else 4 * 2 ** min(rate_limited - 1, 4)) + random.uniform(0, 2)
+            elif r.status_code >= 500:
+                errors += 1
                 last = f"LLM HTTP {r.status_code}: {r.text[:300]}"
-                time.sleep(5 * (attempt + 1))
-                continue
-            if r.status_code != 200:
+                if errors >= 3:
+                    break
+                wait = 5 * errors
+            elif r.status_code != 200:
                 raise RuntimeError(f"LLM HTTP {r.status_code}: {r.text[:500]}")
-            msg = r.json()["choices"][0]["message"]
-            return msg.get("content") or ""
+            else:
+                msg = r.json()["choices"][0]["message"]
+                return msg.get("content") or ""
         except requests.RequestException as e:
+            errors += 1
             last = f"LLM request failed: {e}"
-            time.sleep(5 * (attempt + 1))
+            if errors >= 3:
+                break
+            wait = 5 * errors
+        time.sleep(wait)
     raise RuntimeError(last or "LLM failed")
 
 
@@ -122,6 +159,35 @@ def extract_code(text):
     if "from vg import" not in code:
         code = "from vg import *\n" + code
     return code
+
+
+def normalize_code(code, cls):
+    """Cheap fixes for common LLM slips before rendering: missing math/numpy imports, wrong class name."""
+    head = []
+    if re.search(r"\bmath\.", code) and not re.search(r"^\s*import math\b", code, re.M):
+        head.append("import math")
+    if re.search(r"\bnp\.", code) and not re.search(r"^\s*import numpy as np\b", code, re.M):
+        head.append("import numpy as np")
+    if re.search(r"\brandom\.", code) and not re.search(r"^\s*import random\b", code, re.M):
+        head.append("import random")
+    if head:
+        code = re.sub(r"^(from vg import \*)", lambda m: m.group(1) + "\n" + "\n".join(head), code, count=1, flags=re.M)
+    if not re.search(rf"^class {cls}\b", code, re.M):
+        names = re.findall(r"^class (\w+)\((?:Timed|Scene)\)", code, re.M)
+        if len(names) == 1:
+            code = re.sub(rf"\b{names[0]}\b", cls, code)
+        code = re.sub(rf"^class {cls}\(Scene\)", f"class {cls}(Timed)", code, flags=re.M)
+    return code
+
+
+def error_summary(err):
+    """The most informative line of a render error (the exception line, not rich's wrapped box)."""
+    lines = [re.sub(r"^[\s│|╭╰─]+|[\s│|╮╯─]+$", "", l) for l in (err or "").splitlines()]
+    lines = [l for l in lines if l]
+    for l in reversed(lines):
+        if re.match(r"^([A-Za-z_][\w.]*(Error|Exception|Interrupt)|Scene runs|The file must|Import of|Render timed)\b", l):
+            return l[:200]
+    return (lines[-1] if lines else "unknown")[:200]
 
 
 def check_code(code, cls):
@@ -239,6 +305,7 @@ class Pipeline:
 
     def render(self, s, code):
         path = os.path.join(self.dir, s["id"] + ".py")
+        code = normalize_code(code, s["cls"])
         open(path, "w").write(code)
         err = check_code(code, s["cls"])
         if err:
@@ -272,7 +339,7 @@ class Pipeline:
             if video:
                 s["status"] = "ok" if attempt == 0 else f"ok after {attempt} fix(es)"
                 return video
-            self.log(f"{s['id']}: render error (try {attempt + 1}): {err.strip().splitlines()[-1][:160] if err.strip() else 'unknown'}")
+            self.log(f"{s['id']}: render error (try {attempt + 1}): {error_summary(err)}")
             if attempt == MAX_FIXES:
                 break
             msgs = s["messages"] + [{"role": "user", "content": prompts.FIX_USER.format(error=err, cls=s["cls"], dur=s["duration"])}]
@@ -315,16 +382,26 @@ class Pipeline:
         self.progress("coding", 20)
         self.log("Writing animation code for every scene...")
         codes = {}
-        with cf.ThreadPoolExecutor(int(os.getenv("LLM_PARALLEL", "4"))) as ex:
-            futs = {ex.submit(self.write_code, plan, s, i): s for i, s in enumerate(scenes)}
+        failed = []
+        n_par = max(1, min(8, int(self.cfg.get("llm_parallel") or LLM_PARALLEL)))
+        with cf.ThreadPoolExecutor(n_par) as ex:
+            futs = {ex.submit(self.write_code, plan, s, i): (s, i) for i, s in enumerate(scenes)}
             for f in cf.as_completed(futs):
-                s = futs[f]
+                s, i = futs[f]
                 try:
                     codes[s["id"]] = f.result()
                 except Exception as e:  # noqa: BLE001
-                    self.log(f"{s['id']}: code generation failed ({e}); will use fallback")
-                    s["messages"] = []
-                    codes[s["id"]] = fallback_code(s["cls"], plan.get("title", ""), s["narration"])
+                    self.log(f"{s['id']}: code generation failed ({str(e)[:160]}); retrying after the others")
+                    failed.append((s, i))
+        for s, i in sorted(failed, key=lambda x: x[1]):
+            self.check()
+            try:
+                codes[s["id"]] = self.write_code(plan, s, i)
+                self.log(f"{s['id']}: code generation ok on retry")
+            except Exception as e:  # noqa: BLE001
+                self.log(f"{s['id']}: code generation failed again ({str(e)[:160]}); will use fallback")
+                s["messages"] = []
+                codes[s["id"]] = fallback_code(s["cls"], plan.get("title", ""), s["narration"])
         parts = []
         for i, s in enumerate(scenes):
             self.check()

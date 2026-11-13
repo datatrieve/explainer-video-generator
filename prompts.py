@@ -27,6 +27,16 @@ The helper module vg already does `from manim import *` so all of manim is avail
   SCENE_DURATION -> float seconds of narration for this scene.
   class Timed(Scene) with self.finish().
 Write exactly one class named {cls} that subclasses Timed. construct() must end with self.finish().
+Manim CE API pitfalls (these cause most render errors, avoid them):
+- Text: only T(...); it accepts any value but format numbers yourself, e.g. T(f"{{x:.2f}}"). Never pass a number where a string or Mobject is expected.
+- Arc(radius=r, start_angle=a, angle=b) and Circle(radius=r): keywords only, never r=, rad= or a positional radius together with radius=.
+- .scale(factor) takes only the factor (no scale_tips). For arrows set tip size in the constructor: Arrow(a, b, buff=0, max_tip_length_to_length_ratio=0.15).
+- Group several objects with VGroup(*items) before .arrange/.next_to; a Python list has no .arrange.
+- Only use classes that exist in Manim Community v0.19 (Circle, Square, Rectangle, RoundedRectangle, Line, DashedLine, Arrow, DoubleArrow, Dot, Arc, Angle, Polygon, Triangle, NumberPlane, Axes, NumberLine, ValueTracker, always_redraw, VGroup, Code via code_block). No ManimGL names (ShowCreation, TexText, RotatingGroup, CONFIG dicts).
+- Axes(x_range=[a, b, step], y_range=[a, b, step], x_length=.., y_length=..); plot with axes.plot(lambda x: ..., x_range=[a, b], color=..). Do not add axis numbers (they need LaTeX); label with T(...) instead.
+- No LaTeX is installed: DecimalNumber, Integer, Variable, MathTex, Tex all fail. Show changing numbers with T(f"...") and Transform, or always_redraw(lambda: T(f"{{tracker.get_value():.1f}}")).
+- If you use math, numpy or random, import them at the top (import math / import numpy as np / import random).
+- Never rename the class: it must be exactly class {cls}(Timed).
 Timing: the narration lasts {dur:.1f} seconds. Plan animations + waits so they total about {target:.1f} seconds and NEVER exceed {dur:.1f}. Spread self.wait() calls so visuals change as the narration moves on (roughly every 2 to 5 seconds).
 Style: clean, colorful, uncluttered like 3Blue1Brown/StatQuest. Build diagrams step by step (FadeIn, Create, GrowArrow, Write, Transform, Indicate, LaggedStart). Big readable text (titles 36-48, labels 22-30). Avoid overlapping objects: position with .to_edge, .next_to, .arrange, .move_to with explicit coordinates. Remove or fade old objects before adding new ones in the same place. Text longer than ~45 chars must be split into lines or scaled with fit().
 Only import from vg (plus math, random, numpy as np if needed). No file IO, no network, no images, no SVGs, no sounds, no ImageMobject.
@@ -49,7 +59,7 @@ FIX_USER = """That code failed to render. Error output (last lines):
 ```
 {error}
 ```
-Fix it. Remember: only T(...) for text (no Tex/MathTex), class {cls}(Timed), end with self.finish(), total time under {dur:.1f} s. Return the full corrected file in one ```python block."""
+Fix the root cause shown in the error and check the rest of the file for the same mistake. Remember: only T(...) for text (no Tex/MathTex), Manim Community v0.19 API only (no ManimGL names), keyword-only radius=, VGroup(*items) before .arrange, import math/numpy if used, class {cls}(Timed), end with self.finish(), total time under {dur:.1f} s. Return the full corrected file in one ```python block."""
 
 EXAMPLE = '''from vg import *
 

@@ -66,6 +66,7 @@
         <div><label for="llm_base_url">LLM base URL</label><input id="llm_base_url"></div>
         <div><label for="llm_model">LLM model</label><input id="llm_model"></div>
         <div><label for="llm_api_key">LLM API key</label><input id="llm_api_key" type="password" placeholder="server key if blank"></div>
+        <div><label for="llm_parallel">LLM calls at once</label><input id="llm_parallel" type="number" min="1" max="8" value="2"></div>
       </div>
       <div class="row">
         <div><label for="tts_base_url">TTS base URL</label><input id="tts_base_url"></div>
@@ -97,7 +98,7 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const FIELDS = ["minutes","language","voice","speed","extra","llm_base_url","llm_model","llm_api_key","tts_base_url","tts_model","tts_api_key","app_password"];
+const FIELDS = ["minutes","language","voice","speed","extra","llm_base_url","llm_model","llm_api_key","llm_parallel","tts_base_url","tts_model","tts_api_key","app_password"];
 let cfg = {}, current = localStorage.getItem("vg_job"), timer = null;
 const FALLBACK_VOICES = ["af_heart","af_bella","af_nicole","af_sarah","am_adam","am_michael","bf_emma","bm_george","hf_alpha","hf_beta","hm_omega","hm_psi"];
 
@@ -144,7 +145,7 @@ $("go").onclick = async () => {
   save();
   const body = {topic};
   FIELDS.forEach(f => { if (f !== "app_password") body[f] = $(f).value; });
-  body.minutes = parseFloat(body.minutes) || 3; body.speed = parseFloat(body.speed) || 1;
+  body.minutes = parseFloat(body.minutes) || 3; body.speed = parseFloat(body.speed) || 1; body.llm_parallel = parseInt(body.llm_parallel) || 2;
   $("go").disabled = true;
   try {
     const r = await fetch("/api/jobs", {method: "POST", headers: headers(), body: JSON.stringify(body)});
