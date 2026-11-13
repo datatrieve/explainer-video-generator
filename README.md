@@ -39,3 +39,11 @@ Users can also type their own URLs, models and keys in the page (saved only in t
 - `GET /api/jobs/{id}/video` -> MP4, `GET /api/jobs/{id}/sources` -> script + Manim code zip
 
 Free CPU Spaces have 2 vCPU: a 3 minute video takes roughly 5 to 10 minutes. Videos are lost when the Space restarts.
+
+## Modal (live deployment)
+
+Pushing to `main` deploys `modal_app.py` through `.github/workflows/deploy.yml` (repo secrets `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, `TTS_API_KEY`, optional `LLM_API_KEY`; optional repo variables `LLM_BASE_URL`, `LLM_MODEL`).
+
+- `web` scales to zero (0.125 CPU / 256 MiB, 2 min after the last request), so idle costs nothing.
+- Each video runs in its own `render` container: 0.125 CPU / 512 MiB request, bursting to 2 CPU / 4 GiB. One job at a time; others wait.
+- Spend guard: both functions meter their cost; new jobs are refused, and a running job stops, once the month's estimate reaches $28.40 (`GET /api/budget`).

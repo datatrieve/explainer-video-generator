@@ -1,0 +1,28 @@
+name: Deploy to Modal
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      TTS_API_KEY: ${{ secrets.TTS_API_KEY }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install modal==1.6.4
+      - name: Secret
+        run: |
+          modal secret create videogen --force \
+            TTS_BASE_URL="https://tts.h-s.site/v1" TTS_API_KEY="$TTS_API_KEY" \
+            LLM_API_KEY="$LLM_API_KEY" LLM_BASE_URL="${LLM_BASE_URL:-https://api.openai.com/v1}" LLM_MODEL="${LLM_MODEL:-gpt-4.1}"
+      - run: modal deploy modal_app.py
+      - run: modal app list
