@@ -46,4 +46,4 @@ Pushing to `main` deploys `modal_app.py` through `.github/workflows/deploy.yml` 
 
 - `web` scales to zero (0.125 CPU / 256 MiB, 2 min after the last request), so idle costs nothing.
 - Each video runs in its own `render` container: 0.125 CPU / 512 MiB request, bursting to 2 CPU / 4 GiB. One job at a time; others wait.
-- Spend guard: both functions meter their cost; new jobs are refused, and a running job stops, once the month's estimate reaches $28.40 (`GET /api/budget`).
+- Spend guard: both functions meter their cost; new jobs are refused, and a running job stops, once the month's estimate reaches $10 (`GET /api/budget`).

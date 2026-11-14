@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 import modal
 
 APP_NAME = "explainer-video-generator"
-MONTHLY_BUDGET = float(os.getenv("MONTHLY_BUDGET", "28.40"))
+MONTHLY_BUDGET = float(os.getenv("MONTHLY_BUDGET", "10.00"))  # OpenBot app has its own $18 guard
 CPU_RATE = 0.0000131  # $ per physical core-second
 MEM_RATE = 0.00000222  # $ per GiB-second
 WEB_CPU, WEB_MEM = 0.125, 256
